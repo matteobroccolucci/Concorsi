@@ -354,10 +354,28 @@ def main() -> int:
         print("Primo avvio: stato inizializzato, nessun messaggio inviato.")
         return 0
 
+    
     if found:
+        errors = []
+
         for msg in format_messages(found):
-            send_whatsapp(cfg, msg)
+            try:
+                send_whatsapp(cfg, msg)
+            except Exception as e:
+                print(f"Errore WhatsApp: {e}")
+                errors.append(e)
+
+            try:
+                send_telegram(msg)
+            except Exception as e:
+                print(f"Errore Telegram: {e}")
+                errors.append(e)
+
             time.sleep(1)
+
+        if errors:
+            raise RuntimeError("Uno o più invii non sono riusciti.")
+
 
     # Segna come visti TUTTI i bandi letti (anche quelli non di interesse),
     # solo dopo l'invio riuscito.
