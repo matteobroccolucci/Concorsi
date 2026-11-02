@@ -146,13 +146,59 @@ def _eval_groups(text: str, groups: list[list[str]]) -> list[str]:
     return found
 
 
+
 def matches(item: dict, cfg: dict) -> list[str]:
-    """Ritorna le parole chiave trovate (lista vuota = scartato)."""
+    """Cerca le specialità nel titolo e, se necessario, nel testo integrale."""
     flt = cfg.get("filtri", {})
-    exclude = [k.lower() for k in flt.get("escludi", [])]
+
+    # Titolo e nome dell'ente
     text = f"{item['title']} {item['ente']}".lower()
+
+    # Esclusioni basate sul titolo e sull'ente
+    exclude = [k.lower() for k in flt.get("escludi", [])]
     if any(k in text for k in exclude):
         return []
+
+    # Compatibilità con il vecchio filtro a gruppi
+    groups = [
+        [k.lower() for k in g]
+        for g in flt.get("gruppi_and", [])
+    ]
+
+    if groups:
+        found = _eval_groups(text, groups)
+        if found:
+            return found
+
+    else:
+        # Nuovo filtro nazionale per parole chiave
+        include = [
+            k.lower()
+            for k in flt.get("parole_chiave", [])
+        ]
+
+        if not include:
+            return ["*"]
+
+        found = [k for k in include if k in text]
+        if found:
+            return found
+
+    # Se non trova corrispondenze nel titolo,
+    # controlla il testo integrale del bando
+    if flt.get("cerca_nel_testo", False):
+        full_text = f"{text} {fetch_text(item['url'])}"
+
+        if groups:
+            return _eval_groups(full_text, groups)
+
+        return [
+            k for k in include
+            if k in full_text
+        ]
+
+    return []
+
 
     # Modalita' a gruppi: [[specialita...], [luogo...]] -> serve un match in OGNI gruppo
     groups = [[k.lower() for k in g] for g in flt.get("gruppi_and", [])]
