@@ -256,6 +256,27 @@ def send_whatsapp(cfg: dict, body: str) -> None:
     if r.status_code >= 300:
         raise RuntimeError(f"Invio WhatsApp fallito ({r.status_code}): {r.text[:300]}")
 
+def send_telegram(body: str) -> None:
+    """Invia una notifica Telegram."""
+    token = os.environ["TELEGRAM_BOT_TOKEN"]
+    chat_id = os.environ["TELEGRAM_CHAT_ID"]
+
+    r = requests.post(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        json={
+            "chat_id": chat_id,
+            "text": body,
+            "disable_web_page_preview": True,
+        },
+        timeout=30,
+    )
+
+    r.raise_for_status()
+
+    result = r.json()
+    if not result.get("ok"):
+        raise RuntimeError(f"Invio Telegram fallito: {result}")
+
 
 def format_messages(found: list[tuple[dict, list[str]]], max_len: int = 1500) -> list[str]:
     """Raggruppa i bandi in messaggi non troppo lunghi."""
