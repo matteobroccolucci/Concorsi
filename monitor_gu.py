@@ -379,8 +379,26 @@ def main() -> int:
 
     # Segna come visti TUTTI i bandi letti (anche quelli non di interesse),
     # solo dopo l'invio riuscito.
+    
     save_seen(seen | all_codes)
+
+    # Riepilogo automatico su Telegram a ogni controllo
+    timestamp = time.strftime("%d/%m/%Y alle %H:%M")
+
+    report = (
+        "🟢 MONITOR CONCORSI - CONTROLLO COMPLETATO\n\n"
+        f"📅 {timestamp}\n"
+        f"📰 Gazzette lette: {len(issues)}\n"
+        f"📋 Bandi analizzati: {len(all_codes)}\n"
+        f"🔎 Nuovi concorsi pertinenti: {len(found)}\n\n"
+        "🇮🇹 Ricerca nazionale - Chirurgia Generale"
+    )
+
+    send_telegram(report)
+    print("Riepilogo Telegram inviato.")
+
     return 0
+
 
 
 if __name__ == "__main__":
