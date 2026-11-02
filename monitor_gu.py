@@ -558,6 +558,13 @@ def format_messages(
 # ---------------------------------------------------------------------------
 
 def main() -> int:
+        print("\n--- DIAGNOSTICA FILTRO LAZIO ---")
+     print("Enti sanitari riconosciuti:")
+
+    for ente in ENTI_LAZIO:
+        print(f"  - {ente}")
+
+    print("--- FINE DIAGNOSTICA ---\n")
 
     parser = argparse.ArgumentParser()
 
@@ -600,6 +607,9 @@ def main() -> int:
         return 2
 
     found = []
+    count_local_entity = 0
+    count_local_workplace = 0
+    count_surgery = 0
     all_codes = set()
 
     for label, url in issues:
@@ -616,14 +626,36 @@ def main() -> int:
             if not args.dry_run and code in seen:
                 continue
 
-            keywords = matches(item, cfg)
+            if is_lazio_entity(item.get("ente", "")) or is_lazio_entity(item.get("title", "")):
+                count_local_entity += 1
 
+            text_to_check = normalize(
+                item.get("title", "") + " " + item.get("ente", "")
+            )
+
+            if has_lazio_workplace(
+                item.get("title", "") + " " + item.get("ente", "")
+            ):
+                count_local_workplace += 1
+
+            if any(
+                normalize(k) in text_to_check
+                for k in cfg.get("filtri", {}).get("parole_chiave", [])
+            ):
+                count_surgery += 1
+
+            keywords = matches(item, cfg)
             if keywords:
                 found.append((item, keywords))
 
         time.sleep(0.5)
 
     print(
+            print("\n--- RISULTATI DIAGNOSTICA ---")
+    print(f"Enti riconosciuti nel Lazio: {count_local_entity}")
+    print(f"Bandi con sede di lavoro nel Lazio: {count_local_workplace}")
+    print(f"Bandi con riferimento a Chirurgia Generale nel titolo/ente: {count_surgery}")
+    print("--- FINE DIAGNOSTICA ---\n")
         f"Gazzette lette: {len(issues)} | "
         f"bandi analizzati: {len(all_codes)} | "
         f"opportunita' pertinenti: {len(found)}"
