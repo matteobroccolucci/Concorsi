@@ -568,6 +568,36 @@ def main() -> int:
     for label, url in issues:
 
         items = parse_issue(label, url)
+                # DIAGNOSTICA: individua bandi pubblicati da enti del Lazio
+        enti_da_controllare = [
+            "asl roma", "asl rm",
+            "asl frosinone", "asl latina",
+            "asl rieti", "asl viterbo",
+            "azienda sanitaria locale",
+            "policlinico umberto",
+            "policlinico tor vergata",
+            "sant'andrea", "sant’andrea",
+            "san camillo", "san giovanni",
+            "spallanzani", "ifo",
+            "regina elena", "bambino gesu",
+            "bambino gesù",
+        ]
+
+        for bando in items:
+            testo_bando = (
+                str(bando.get("title", "")) + " " +
+                str(bando.get("ente", ""))
+            ).lower()
+
+            if any(nome in testo_bando for nome in enti_da_controllare):
+                print(
+                    "DIAGNOSTICA LAZIO:",
+                    bando.get("ente"),
+                    "|",
+                    bando.get("title"),
+                    "|",
+                    bando.get("url")
+                )
 
         for item in items:
 
