@@ -334,10 +334,11 @@ FOLLOW_UP_ONLY = re.compile(
 )
 
 
+
 def matches(item: dict, cfg: dict) -> list[str]:
     """
     Seleziona opportunita' di Chirurgia Generale con ente o sede nel Lazio.
-    Include concorsi, avvisi, mobilita', incarichi e collaborazioni.
+    Scarica il testo integrale solo quando necessario.
     """
 
     filters = cfg.get("filtri", {})
@@ -345,12 +346,9 @@ def matches(item: dict, cfg: dict) -> list[str]:
     title = str(item.get("title", ""))
     entity = str(item.get("ente", ""))
 
-    title_entity = normalize(
-        f"{title} {entity}"
-    )
+    title_entity = normalize(f"{title} {entity}")
 
     # Esclude comunicazioni che non rappresentano nuove opportunita'.
-    # Le rettifiche sono invece mantenute come aggiornamenti.
     if FOLLOW_UP_ONLY.search(normalize(title)):
         return []
 
@@ -359,34 +357,35 @@ def matches(item: dict, cfg: dict) -> list[str]:
         for x in filters.get("escludi", [])
     ]
 
-    if any(
-        word and word in title_entity
-        for word in exclusions
-    ):
+    if any(word and word in title_entity for word in exclusions):
         return []
 
-    # Riconoscimento dell'ente laziale.
+    # Primo controllo: ente laziale.
     local_employer = (
         is_lazio_entity(entity)
         or is_lazio_entity(title)
     )
 
-    # Recupero del testo completo.
     raw_full_text = f"{title} {entity}"
 
-    if filters.get("cerca_nel_testo", True):
+    # Se l'ente non e' laziale, cerca prima la sede nel Lazio
+    # usando titolo ed ente. Solo se non basta scarica il testo.
+    if not local_employer:
+        if not has_lazio_workplace(raw_full_text):
+            if not filters.get("cerca_nel_testo", True):
+                return []
+
+            raw_full_text += " " + fetch_text(item["url"])
+
+            if not has_lazio_workplace(raw_full_text):
+                return []
+
+    # Per gli enti laziali scarica il testo per verificare la specialita'.
+    elif filters.get("cerca_nel_testo", True):
         raw_full_text += " " + fetch_text(item["url"])
 
     full_text = normalize(raw_full_text)
 
-    # Se l'ente non e' laziale, deve risultare una sede nel Lazio.
-    if (
-        not local_employer
-        and not has_lazio_workplace(raw_full_text)
-    ):
-        return []
-
-    # Ricerca della Chirurgia Generale.
     include = [
         normalize(str(x))
         for x in filters.get("parole_chiave", [])
@@ -395,10 +394,7 @@ def matches(item: dict, cfg: dict) -> list[str]:
     include = [word for word in include if word]
 
     if not include:
-        include = [
-            "chirurgia generale",
-            "chirurgo generale",
-        ]
+        include = ["chirurgia generale", "chirurgo generale"]
 
     found = [
         keyword
@@ -409,7 +405,6 @@ def matches(item: dict, cfg: dict) -> list[str]:
     if not found:
         return []
 
-    # Segnala le rettifiche come aggiornamenti.
     if normalize(title).startswith("rettifica"):
         found.append("AGGIORNAMENTO/RETTIFICA")
 
