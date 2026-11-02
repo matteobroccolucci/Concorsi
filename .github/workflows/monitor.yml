@@ -18,11 +18,10 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - name: Esegui monitor
-       
-env:
-  CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
-  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      env: 
+      CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
 
         run: python monitor_gu.py
       - name: Salva stato (seen.json)
