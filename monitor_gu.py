@@ -557,9 +557,11 @@ def format_messages(
 # MAIN
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
-        print("\n--- DIAGNOSTICA FILTRO LAZIO ---")
-     print("Enti sanitari riconosciuti:")
+
+    print("\n--- DIAGNOSTICA FILTRO LAZIO ---")
+    print("Enti sanitari riconosciuti:")
 
     for ente in ENTI_LAZIO:
         print(f"  - {ente}")
@@ -567,6 +569,7 @@ def main() -> int:
     print("--- FINE DIAGNOSTICA ---\n")
 
     parser = argparse.ArgumentParser()
+
 
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--first-run", action="store_true")
