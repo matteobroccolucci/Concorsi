@@ -12,7 +12,7 @@ gruppi_and = [
     # 2) luogo: regione, province, capoluoghi e principali enti sanitari/universitari del Lazio
     [
         "lazio",
-        "roma", "latina", "frosinone", "viterbo", "rieti",
+        "roma", "latina", "frosinone", "viterbo", "rieti", "ancona",
         "asl roma", "asl latina", "asl frosinone", "asl viterbo", "asl rieti",
         "san camillo", "forlanini", "umberto i", "sant'andrea", "sant’andrea",
         "tor vergata", "la sapienza", "sapienza", "gemelli", "campus bio-medico",
