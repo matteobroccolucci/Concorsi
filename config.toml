@@ -1,41 +1,39 @@
-# Filtro impostato per: CHIRURGIA GENERALE nel LAZIO
+
+# MONITOR NAZIONALE - CHIRURGIA GENERALE
 
 [filtri]
-# Un bando viene inviato solo se soddisfa TUTTI i gruppi qui sotto
-# (basta una parola per gruppo; maiuscole/minuscole ignorate).
-gruppi_and = [
-    # 1) specialita'
-    [
-        "chirurgia generale",
-        "chirurgo generale",
-    ],
-    # 2) luogo: regione, province, capoluoghi e principali enti sanitari/universitari del Lazio
-    [
-        "lazio",
-        "roma", "latina", "frosinone", "viterbo", "rieti", "ancona",
-        "asl roma", "asl latina", "asl frosinone", "asl viterbo", "asl rieti",
-        "san camillo", "forlanini", "umberto i", "sant'andrea", "sant’andrea",
-        "tor vergata", "la sapienza", "sapienza", "gemelli", "campus bio-medico",
-        "bambino gesù", "bambino gesu", "spallanzani", "san giovanni addolorata",
-        "san filippo neri", "san pietro fatebenefratelli", "istituto dermopatico", "istituti fisioterapici",
-        "regina elena", "ares 118", "belcolle", "goretti", "spaziani", "fabrizio spaziani",
-        "civitavecchia", "tivoli", "pomezia", "anzio", "frascati", "albano",
-        "formia", "gaeta", "terracina", "cassino", "tarquinia",
-    ],
+
+parole_chiave = [
+    "chirurgia generale",
+    "chirurgo generale",
+    "chirurgia gen.",
+    "disciplina chirurgia generale",
+    "disciplina di chirurgia generale",
 ]
 
-# Se titolo/ente non bastano (es. "dirigente medico, varie discipline"), per i bandi che
-# contengono una di queste parole il programma legge il testo completo del bando e riprova.
 cerca_nel_testo = true
-prefiltro_testo = ["dirigente medico", "dirigenti medici", "chirurg"]
 
-# Scarta i bandi che contengono una di queste parole
+prefiltro_testo = [
+    "dirigente medico",
+    "dirigenti medici",
+    "chirurg",
+    "medico",
+    "incarico",
+    "avviso",
+    "collaborazione",
+    "libero professionale",
+    "co.co.co",
+    "co.co.co.",
+    "tempo determinato",
+    "tempo indeterminato",
+    "mobilità",
+    "mobilita",
+    "selezione pubblica",
+    "conferimento incarico",
+]
+
 escludi = [
-    "graduatoria",
     "borsa di studio",
-    "diario delle prove",
-    "rettifica",
-    "romagna",          # evita che "roma" faccia scattare l'Emilia-Romagna
     "chirurgia plastica",
     "chirurgia vascolare",
     "chirurgia toracica",
@@ -46,13 +44,7 @@ escludi = [
 ]
 
 [whatsapp]
-# "callmebot" (gratis, uso personale, setup in 2 minuti) oppure "twilio" (piu' robusto)
-provider = "callmebot"
-# Il tuo numero in formato internazionale
-numero = "+393313954490"
-# Solo per twilio: numero mittente (sandbox: +14155238886)
-twilio_from = "+14155238886"
 
-# I segreti NON vanno qui, ma in variabili d'ambiente:
-#   callmebot -> CALLMEBOT_APIKEY
-#   twilio    -> TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
+provider = "callmebot"
+numero = "+393313954490"
+twilio_from = "+14155238886"
