@@ -1,15 +1,6 @@
 
 #!/usr/bin/env python3
-"""
-Monitor Gazzetta Ufficiale - 4a Serie Speciale Concorsi ed Esami.
-
-Ricerca nazionale dei concorsi di Chirurgia Generale:
-- Enti sanitari del Lazio;
-- altri enti con posti o sedi di lavoro nel Lazio.
-
-Invia notifiche WhatsApp e Telegram per i nuovi bandi.
-Invia inoltre un riepilogo Telegram a ogni controllo.
-"""
+"""Monitor Gazzetta Ufficiale - Chirurgia Generale nel Lazio."""
 
 from __future__ import annotations
 
@@ -20,18 +11,20 @@ import re
 import sys
 import time
 import tomllib
+import unicodedata
 from pathlib import Path
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 
-
 BASE = "https://www.gazzettaufficiale.it"
 LIST_URL = f"{BASE}/30giorni/concorsi"
 HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "config.toml"
-STATE_PATH = HERE / "seen.json"
+
+# Stato separato dal vecchio monitor nazionale.
+STATE_PATH = HERE / "seen_lazio.json"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; gu-monitor/1.0; uso personale)"
@@ -92,12 +85,11 @@ def list_issues() -> list[tuple[str, str]]:
     """Restituisce le Gazzette degli ultimi 30 giorni."""
 
     soup = get(LIST_URL)
-
     issues = []
     seen_urls = set()
 
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
+    for link in soup.find_all("a", href=True):
+        href = link["href"]
 
         if (
             "caricaDettaglio" in href
@@ -107,52 +99,48 @@ def list_issues() -> list[tuple[str, str]]:
 
             if url not in seen_urls:
                 seen_urls.add(url)
-
                 label = " ".join(
-                    a.get_text(" ", strip=True).split()
+                    link.get_text(" ", strip=True).split()
                 )
-
                 issues.append((label, url))
 
     return issues
 
 
 def parse_issue(label: str, url: str) -> list[dict]:
-    """Estrae i bandi di una Gazzetta."""
+    """Estrae codice, titolo, ente e collegamento di ciascun atto."""
 
     soup = get(url)
-
     items = {}
     ente = ""
 
-    for el in soup.find_all(
+    for element in soup.find_all(
         ["span", "div", "h2", "h3", "h4", "strong", "a"]
     ):
-        classes = " ".join(el.get("class", []))
+        classes = " ".join(element.get("class", []))
 
         if (
-            el.name != "a"
+            element.name != "a"
             and re.search(r"emettitore|ente|rubrica", classes, re.I)
         ):
-            txt = " ".join(
-                el.get_text(" ", strip=True).split()
+            text = " ".join(
+                element.get_text(" ", strip=True).split()
             )
 
-            if txt:
-                ente = txt
+            if text:
+                ente = text
 
             continue
 
-        if el.name == "a" and el.get("href"):
-            match = CODICE_RE.search(el["href"])
+        if element.name == "a" and element.get("href"):
+            match = CODICE_RE.search(element["href"])
 
             if not match:
                 continue
 
             code = match.group(1)
-
             title = " ".join(
-                el.get_text(" ", strip=True).split()
+                element.get_text(" ", strip=True).split()
             )
 
             if not title or code in items:
@@ -162,7 +150,7 @@ def parse_issue(label: str, url: str) -> list[dict]:
                 "code": code,
                 "title": title,
                 "ente": ente,
-                "url": urljoin(BASE, el["href"]),
+                "url": urljoin(BASE, element["href"]),
                 "issue": label,
             }
 
@@ -177,215 +165,259 @@ _TEXT_CACHE: dict[str, str] = {}
 
 
 def fetch_text(url: str) -> str:
-    """Scarica e memorizza il testo integrale del bando."""
+    """Scarica il testo completo del bando, con cache."""
 
     if url not in _TEXT_CACHE:
         try:
             _TEXT_CACHE[url] = " ".join(
                 get(url).get_text(" ", strip=True).split()
-            ).lower()
+            )
 
-        except RuntimeError:
+        except RuntimeError as error:
+            print(
+                f"ATTENZIONE: testo non recuperabile ({url}): {error}",
+                file=sys.stderr
+            )
             _TEXT_CACHE[url] = ""
 
-        time.sleep(1)
+        time.sleep(0.5)
 
     return _TEXT_CACHE[url]
 
 
+def normalize(value: str) -> str:
+    """Minuscolo, senza accenti e con spazi uniformi."""
+
+    value = unicodedata.normalize(
+        "NFKD", value
+    ).encode("ascii", "ignore").decode("ascii")
+
+    value = value.lower().replace("’", "'")
+    value = re.sub(r"[^a-z0-9]+", " ", value)
+
+    return " ".join(value.split())
+
+
 # ---------------------------------------------------------------------------
-# FILTRO GEOGRAFICO E SPECIALISTICO
+# ENTI SANITARI DEL LAZIO
 # ---------------------------------------------------------------------------
+
+ASL_LAZIO_PATTERNS = [
+    re.compile(
+        r"\b(?:asl|azienda sanitaria locale)\s+"
+        r"(?:di\s+)?(?:roma|rm)\s*[1-6]\b"
+    ),
+    re.compile(
+        r"\b(?:asl|azienda sanitaria locale)\s+"
+        r"(?:di\s+)?(?:frosinone|latina|rieti|viterbo)\b"
+    ),
+]
+
+
+ENTI_LAZIO = [
+    "azienda ospedaliera san camillo forlanini",
+    "san camillo forlanini",
+    "azienda ospedaliera san giovanni addolorata",
+    "san giovanni addolorata",
+    "policlinico umberto i",
+    "policlinico umberto primo",
+    "policlinico tor vergata",
+    "azienda ospedaliero universitaria sant andrea",
+    "azienda ospedaliera sant andrea",
+    "ospedale sant andrea",
+    "istituto nazionale per le malattie infettive lazzaro spallanzani",
+    "inmi lazzaro spallanzani",
+    "lazzaro spallanzani",
+    "istituti fisioterapici ospitalieri",
+    "istituto nazionale tumori regina elena",
+    "regina elena",
+    "fondazione policlinico universitario agostino gemelli",
+    "policlinico gemelli",
+    "fondazione policlinico universitario campus bio medico",
+    "policlinico campus bio medico",
+    "ospedale pediatrico bambino gesu",
+    "bambino gesu",
+    "ospedale isola tiberina",
+    "gemelli isola",
+    "fatebenefratelli",
+    "ospedale israelitico",
+    "istituto dermopatico dell immacolata",
+    "istituto dermopatico immacolata",
+    "ares 118",
+    "regione lazio",
+]
+
+
+LOCALITIES_LAZIO = [
+    "roma", "frosinone", "latina", "rieti", "viterbo",
+    "civitavecchia", "tivoli", "guidonia", "pomezia",
+    "anzio", "aprilia", "cassino", "sora", "formia",
+    "terracina", "velletri", "colleferro", "monterotondo",
+    "subiaco", "tarquinia", "cerveteri", "bracciano",
+    "nettuno", "frascati", "marino", "albano laziale",
+    "fondi", "gaeta", "minturno", "isola del liri",
+    "ceccano", "alatri", "ferentino", "anagni",
+    "palestrina", "ladispoli", "fiumicino", "capena",
+    "ronciglione", "montefiascone", "cittaducale",
+    "poggio mirteto",
+]
+
+
+WORKPLACE_CONTEXT = re.compile(
+    r"\b(?:sede|sedi|luogo di lavoro|sede di servizio|"
+    r"sede di lavoro|assegnazione|destinazione|presso|"
+    r"posto|posti|struttura sanitaria|struttura|presidio|"
+    r"ospedale|distretto|reparto|unita operativa|"
+    r"ambulatorio|servizio|articolazione territoriale)\b"
+)
+
+
+def is_lazio_entity(text: str) -> bool:
+    """Verifica che l'ente sia uno degli enti sanitari laziali."""
+
+    normalized = normalize(text)
+
+    if any(
+        pattern.search(normalized)
+        for pattern in ASL_LAZIO_PATTERNS
+    ):
+        return True
+
+    return any(
+        name in normalized
+        for name in ENTI_LAZIO
+    )
+
+
+def has_lazio_workplace(text: str) -> bool:
+    """Cerca una sede laziale vicina a indicazioni di lavoro o servizio."""
+
+    locality_pattern = re.compile(
+        r"\b(?:"
+        + "|".join(
+            re.escape(x)
+            for x in sorted(
+                LOCALITIES_LAZIO,
+                key=len,
+                reverse=True
+            )
+        )
+        + r")\b"
+    )
+
+    # Separiamo le frasi prima di normalizzare.
+    # Evita di associare una sede in un'altra regione
+    # a una citazione casuale di Roma in una frase successiva.
+    for raw_sentence in re.split(
+        r"[.;:!?]+|[\n\r]+",
+        text
+    ):
+        sentence = normalize(raw_sentence)
+
+        if (
+            locality_pattern.search(sentence)
+            and WORKPLACE_CONTEXT.search(sentence)
+        ):
+            return True
+
+    return False
+
+
+# ---------------------------------------------------------------------------
+# FILTRO DELLE PROCEDURE
+# ---------------------------------------------------------------------------
+
+FOLLOW_UP_ONLY = re.compile(
+    r"^\s*(?:diario|annullamento|revoca|graduatoria|esito|"
+    r"convocazione|calendario|elenco ammessi|ammissione)\b",
+    re.IGNORECASE,
+)
+
 
 def matches(item: dict, cfg: dict) -> list[str]:
     """
-    Seleziona bandi di Chirurgia Generale:
-    1. pubblicati da enti sanitari del Lazio;
-    2. oppure con sede di lavoro nel Lazio indicata nel bando.
+    Seleziona opportunita' di Chirurgia Generale con ente o sede nel Lazio.
+    Include concorsi, avvisi, mobilita', incarichi e collaborazioni.
     """
 
-    flt = cfg.get("filtri", {})
+    filters = cfg.get("filtri", {})
 
     title = str(item.get("title", ""))
-    ente = str(item.get("ente", ""))
+    entity = str(item.get("ente", ""))
 
-    text = f"{title} {ente}".lower()
-
-    # Esclusioni per specialità non pertinenti
-    exclude = [
-        str(k).lower()
-        for k in flt.get("escludi", [])
-    ]
-
-    if any(k in text for k in exclude):
-        return []
-
-    # Enti sanitari del Lazio e denominazioni alternative
-    enti_lazio = [
-        "asl roma 1",
-        "asl roma 2",
-        "asl roma 3",
-        "asl roma 4",
-        "asl roma 5",
-        "asl roma 6",
-        "asl rm 1",
-        "asl rm 2",
-        "asl rm 3",
-        "asl rm 4",
-        "asl rm 5",
-        "asl rm 6",
-        "asl di roma 1",
-        "asl di roma 2",
-        "asl di roma 3",
-        "asl di roma 4",
-        "asl di roma 5",
-        "asl di roma 6",
-        "asl frosinone",
-        "asl di frosinone",
-        "asl latina",
-        "asl di latina",
-        "asl rieti",
-        "asl di rieti",
-        "asl viterbo",
-        "asl di viterbo",
-        "azienda sanitaria locale roma",
-        "azienda sanitaria locale di frosinone",
-        "azienda sanitaria locale di latina",
-        "azienda sanitaria locale di rieti",
-        "azienda sanitaria locale di viterbo",
-        "azienda ospedaliera san camillo",
-        "san camillo forlanini",
-        "azienda ospedaliera san giovanni",
-        "san giovanni addolorata",
-        "policlinico umberto i",
-        "policlinico umberto primo",
-        "policlinico tor vergata",
-        "azienda ospedaliera sant'andrea",
-        "azienda ospedaliera sant’andrea",
-        "ospedale sant'andrea",
-        "ospedale sant’andrea",
-        "ifo",
-        "istituti fisioterapici ospitalieri",
-        "istituto nazionale tumori regina elena",
-        "regina elena",
-        "spallanzani",
-        "ospedale pediatrico bambino gesu",
-        "ospedale pediatrico bambino gesù",
-        "santa maria goretti",
-        "sandro pertini",
-        "san filippo neri",
-        "sant'eugenio",
-        "sant’eugenio",
-        "belcolle",
-        "santa rosa",
-        "san camillo de lellis",
-        "fabrizio spaziani",
-        "santa scolastica",
-        "san paolo di civitavecchia",
-    ]
-
-    ente_lazio = any(
-        nome in text for nome in enti_lazio
+    title_entity = normalize(
+        f"{title} {entity}"
     )
 
-    # Località del Lazio
-    localita_lazio = [
-        "lazio",
-        "roma",
-        "frosinone",
-        "latina",
-        "rieti",
-        "viterbo",
-        "civitavecchia",
-        "tivoli",
-        "guidonia",
-        "pomezia",
-        "anzio",
-        "aprilia",
-        "cassino",
-        "sora",
-        "formia",
-        "terracina",
-        "velletri",
-        "colleferro",
-        "monterotondo",
-        "subiaco",
-        "tarquinia",
-        "cerveteri",
-        "bracciano",
-        "nettuno",
-        "frascati",
-        "marino",
-        "albano laziale",
-        "fondi",
-        "gaeta",
-        "minturno",
-        "isola del liri",
-        "ceccano",
-        "alatri",
-        "ferentino",
-        "anagni",
-        "palestrina",
-        "ladispoli",
-        "fiumicino",
-        "capena",
-        "ronciglione",
-        "montefiascone",
-        "cittaducale",
-        "poggio mirteto",
-    ]
-
-    # Recupera il testo integrale per cercare specialità e località
-    full_text = text
-
-    if flt.get("cerca_nel_testo", False):
-        full_text += " " + fetch_text(item["url"])
-
-    # Ente laziale oppure località laziale nel testo
-    sede_lazio = any(
-        loc in full_text for loc in localita_lazio
-    )
-
-    if not (ente_lazio or sede_lazio):
+    # Esclude comunicazioni che non rappresentano nuove opportunita'.
+    # Le rettifiche sono invece mantenute come aggiornamenti.
+    if FOLLOW_UP_ONLY.search(normalize(title)):
         return []
 
-    # Compatibilità con il vecchio filtro a gruppi AND
-    groups = [
-        [str(k).lower() for k in group]
-        for group in flt.get("gruppi_and", [])
+    exclusions = [
+        normalize(str(x))
+        for x in filters.get("escludi", [])
     ]
 
-    if groups:
-        found = []
+    if any(
+        word and word in title_entity
+        for word in exclusions
+    ):
+        return []
 
-        for group in groups:
-            hit = [k for k in group if k in full_text]
+    # Riconoscimento dell'ente laziale.
+    local_employer = (
+        is_lazio_entity(entity)
+        or is_lazio_entity(title)
+    )
 
-            if not hit:
-                return []
+    # Recupero del testo completo.
+    raw_full_text = f"{title} {entity}"
 
-            found.append(hit[0])
+    if filters.get("cerca_nel_testo", True):
+        raw_full_text += " " + fetch_text(item["url"])
 
-        return found
+    full_text = normalize(raw_full_text)
 
-    # Parole chiave della Chirurgia Generale
+    # Se l'ente non e' laziale, deve risultare una sede nel Lazio.
+    if (
+        not local_employer
+        and not has_lazio_workplace(raw_full_text)
+    ):
+        return []
+
+    # Ricerca della Chirurgia Generale.
     include = [
-        str(k).lower()
-        for k in flt.get("parole_chiave", [])
+        normalize(str(x))
+        for x in filters.get("parole_chiave", [])
     ]
+
+    include = [word for word in include if word]
 
     if not include:
-        return ["Lazio"]
+        include = [
+            "chirurgia generale",
+            "chirurgo generale",
+        ]
 
-    return [
+    found = [
         keyword
         for keyword in include
         if keyword in full_text
     ]
 
+    if not found:
+        return []
+
+    # Segnala le rettifiche come aggiornamenti.
+    if normalize(title).startswith("rettifica"):
+        found.append("AGGIORNAMENTO/RETTIFICA")
+
+    return found
+
 
 # ---------------------------------------------------------------------------
-# INVIO WHATSAPP
+# WHATSAPP
 # ---------------------------------------------------------------------------
 
 def send_whatsapp(cfg: dict, body: str) -> None:
@@ -434,7 +466,7 @@ def send_whatsapp(cfg: dict, body: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# INVIO TELEGRAM
+# TELEGRAM
 # ---------------------------------------------------------------------------
 
 def send_telegram(body: str) -> None:
@@ -473,25 +505,41 @@ def format_messages(
 
     blocks = []
 
-    for item, kws in found:
+    for item, keywords in found:
 
-        kw = (
-            ""
-            if kws == ["*"]
-            else f"\n🔎 {', '.join(kws)}"
+        is_rectification = (
+            "AGGIORNAMENTO/RETTIFICA" in keywords
+        )
+
+        specialty = [
+            x for x in keywords
+            if x != "AGGIORNAMENTO/RETTIFICA"
+        ]
+
+        tag_text = (
+            "\n⚠️ RETTIFICA/AGGIORNAMENTO"
+            if is_rectification
+            else ""
+        )
+
+        keyword_text = (
+            f"\n🔎 {', '.join(specialty)}"
+            if specialty
+            else ""
         )
 
         blocks.append(
-            f"📌 {item['title']}\n"
+            f"📌 {item['title']}{tag_text}\n"
             f"🏛 {item['ente'] or 'n/d'}\n"
-            f"📰 {item['issue']}{kw}\n"
+            f"📰 {item['issue']}{keyword_text}\n"
             f"🔗 {item['url']}"
         )
 
     messages = []
+
     current = (
-        f"📢 Nuovi concorsi di Chirurgia Generale nel Lazio "
-        f"({len(found)})\n"
+        f"📢 Nuove opportunita' - "
+        f"Chirurgia Generale nel Lazio ({len(found)})\n"
     )
 
     for block in blocks:
@@ -527,7 +575,6 @@ def main() -> int:
 
     cfg = load_config()
 
-    # Test WhatsApp
     if args.test_whatsapp:
 
         send_whatsapp(
@@ -538,7 +585,6 @@ def main() -> int:
         print("Messaggio WhatsApp inviato.")
         return 0
 
-    # Test Telegram
     if args.test_telegram:
 
         send_telegram(
@@ -549,17 +595,13 @@ def main() -> int:
         return 0
 
     seen = load_seen()
-
     issues = list_issues()
 
     if not issues:
-
         print(
-            "ATTENZIONE: nessuna Gazzetta trovata. "
-            "La struttura della pagina potrebbe essere cambiata.",
+            "ATTENZIONE: nessuna Gazzetta trovata.",
             file=sys.stderr
         )
-
         return 2
 
     found = []
@@ -568,41 +610,15 @@ def main() -> int:
     for label, url in issues:
 
         items = parse_issue(label, url)
-                # DIAGNOSTICA: individua bandi pubblicati da enti del Lazio
-        enti_da_controllare = [
-            "asl roma", "asl rm",
-            "asl frosinone", "asl latina",
-            "asl rieti", "asl viterbo",
-            "policlinico umberto",
-            "policlinico tor vergata",
-            "sant'andrea", "sant’andrea",
-            "san camillo", "san giovanni",
-            "spallanzani", "ifo",
-            "regina elena", "bambino gesu",
-            "bambino gesù",
-        ]
-
-        for bando in items:
-            testo_bando = (
-                str(bando.get("title", "")) + " " +
-                str(bando.get("ente", ""))
-            ).lower()
-
-            if any(nome in testo_bando for nome in enti_da_controllare):
-                print(
-                    "DIAGNOSTICA LAZIO:",
-                    bando.get("ente"),
-                    "|",
-                    bando.get("title"),
-                    "|",
-                    bando.get("url")
-                )
 
         for item in items:
 
-            all_codes.add(item["code"])
+            code = item["code"]
+            all_codes.add(code)
 
-            if item["code"] in seen:
+            # In dry-run si rivalutano anche i bandi gia' visti.
+            # Non viene modificato alcuno stato.
+            if not args.dry_run and code in seen:
                 continue
 
             keywords = matches(item, cfg)
@@ -610,19 +626,17 @@ def main() -> int:
             if keywords:
                 found.append((item, keywords))
 
-        time.sleep(1)
+        time.sleep(0.5)
 
     print(
         f"Gazzette lette: {len(issues)} | "
-        f"bandi totali: {len(all_codes)} | "
-        f"nuovi concorsi pertinenti: {len(found)}"
+        f"bandi analizzati: {len(all_codes)} | "
+        f"opportunita' pertinenti: {len(found)}"
     )
 
-    # Modalità di prova: non invia e non salva
     if args.dry_run:
 
         for item, keywords in found:
-
             print(
                 f"- [{item['issue']}] "
                 f"{item['title']} "
@@ -630,21 +644,24 @@ def main() -> int:
                 f"{item['url']} {keywords}"
             )
 
+        print(
+            "DRY-RUN: nessuna notifica inviata "
+            "e nessuno stato modificato."
+        )
+
         return 0
 
-    # Primo avvio: inizializza lo stato senza notifiche
     if args.first_run:
 
         save_seen(seen | all_codes)
 
         print(
-            "Primo avvio: stato inizializzato, "
+            "Primo avvio: stato Lazio inizializzato, "
             "nessun messaggio inviato."
         )
 
         return 0
 
-    # Invio notifiche per i nuovi bandi
     if found:
 
         errors = []
@@ -669,14 +686,14 @@ def main() -> int:
 
         if errors:
             raise RuntimeError(
-                "Uno o più invii non sono riusciti. "
-                "Lo stato non verrà aggiornato."
+                "Uno o piu' invii non sono riusciti. "
+                "Lo stato non verra' aggiornato."
             )
 
-    # Salva tutti i codici letti dopo gli invii
+    # Salva i codici dopo gli invii.
+    # Il precedente seen.json resta intatto.
     save_seen(seen | all_codes)
 
-    # Riepilogo Telegram a ogni controllo
     timestamp = time.strftime("%d/%m/%Y alle %H:%M")
 
     report = (
@@ -684,8 +701,8 @@ def main() -> int:
         f"📅 {timestamp}\n"
         f"📰 Gazzette lette: {len(issues)}\n"
         f"📋 Bandi analizzati: {len(all_codes)}\n"
-        f"🔎 Nuovi concorsi pertinenti: {len(found)}\n\n"
-        "🇮🇹 Ricerca regionale - Lazio | Chirurgia Generale"
+        f"🔎 Nuove opportunita' pertinenti: {len(found)}\n\n"
+        "🇮🇹 Lazio - Chirurgia Generale"
     )
 
     send_telegram(report)
