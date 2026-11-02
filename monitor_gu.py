@@ -653,16 +653,19 @@ def main() -> int:
 
         time.sleep(0.5)
 
-    print(
-            print("\n--- RISULTATI DIAGNOSTICA ---")
+    
+    print("\n--- RISULTATI DIAGNOSTICA ---")
     print(f"Enti riconosciuti nel Lazio: {count_local_entity}")
     print(f"Bandi con sede di lavoro nel Lazio: {count_local_workplace}")
     print(f"Bandi con riferimento a Chirurgia Generale nel titolo/ente: {count_surgery}")
     print("--- FINE DIAGNOSTICA ---\n")
+
+    print(
         f"Gazzette lette: {len(issues)} | "
         f"bandi analizzati: {len(all_codes)} | "
         f"opportunita' pertinenti: {len(found)}"
     )
+
 
     if args.dry_run:
 
