@@ -315,10 +315,12 @@ def main() -> int:
         print("Messaggio di prova inviato.")
         return 0
         
+    
     if args.test_telegram:
-    send_telegram("✅ gu-monitor: messaggio di prova Telegram.")
-    print("Messaggio Telegram inviato.")
-    return 0
+        send_telegram("✅ gu-monitor: messaggio di prova Telegram.")
+        print("Messaggio Telegram inviato.")
+        return 0
+
 
     seen = load_seen()
     issues = list_issues()
