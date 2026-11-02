@@ -26,11 +26,13 @@ jobs:
           CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python monitor_gu.py
+        run: python monitor_gu.py --dry-run
 
-      - name: Salva stato
+        - name: Salva stato
         run: |
           git config user.name "gu-monitor"
           git config user.email "gu-monitor@users.noreply.github.com"
-          git add seen.json seen_lazio.json
-          git diff --cached --quiet || (git commit -m "aggiorna stato" && git push)
+          if [ -f seen_lazio.json ]; then
+            git add seen_lazio.json
+          fi
+          git diff --cached --quiet || (git commit -m "aggiorna stato Lazio" && git push)
