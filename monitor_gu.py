@@ -573,7 +573,6 @@ def main() -> int:
             "asl roma", "asl rm",
             "asl frosinone", "asl latina",
             "asl rieti", "asl viterbo",
-            "azienda sanitaria locale",
             "policlinico umberto",
             "policlinico tor vergata",
             "sant'andrea", "sant’andrea",
