@@ -305,6 +305,7 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--first-run", action="store_true")
     ap.add_argument("--test-whatsapp", action="store_true")
+    ap.add_argument("--test-telegram", action="store_true")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -313,6 +314,11 @@ def main() -> int:
         send_whatsapp(cfg, "✅ gu-monitor: messaggio di prova.")
         print("Messaggio di prova inviato.")
         return 0
+        
+    if args.test_telegram:
+    send_telegram("✅ gu-monitor: messaggio di prova Telegram.")
+    print("Messaggio Telegram inviato.")
+    return 0
 
     seen = load_seen()
     issues = list_issues()
