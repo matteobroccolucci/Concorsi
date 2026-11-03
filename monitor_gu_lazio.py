@@ -1,24 +1,4 @@
-Claude
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Monitor gu lazio · PY
- 
 #!/usr/bin/env python3
 """Monitor Gazzetta Ufficiale: atti riferiti al Lazio e profili professionali."""
  
@@ -875,4 +855,3 @@ def main() -> int:
  
 if __name__ == "__main__":
     sys.exit(main())
-Claude ha terminato la risposta
