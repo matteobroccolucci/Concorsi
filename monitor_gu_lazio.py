@@ -107,9 +107,13 @@ def list_issues() -> list[tuple[str, str]]:
     return issues
 
 
-def parse_issue(label: str, url: str) -> list[dict]:
-    """Estrae codice, titolo, ente e collegamento di ciascun atto."""
 
+def parse_issue(label: str, url: str) -> list[dict]:
+    """
+    Legge la pagina della singola Gazzetta.
+    Estrae le informazioni già presenti nella pagina senza
+    aprire i collegamenti ai singoli atti.
+    """
     soup = get(url)
     items = {}
     ente = ""
@@ -123,38 +127,125 @@ def parse_issue(label: str, url: str) -> list[dict]:
             element.name != "a"
             and re.search(r"emettitore|ente|rubrica", classes, re.I)
         ):
-            text = " ".join(
-                element.get_text(" ", strip=True).split()
-            )
-
+            text = " ".join(element.get_text(" ", strip=True).split())
             if text:
                 ente = text
-
             continue
 
-        if element.name == "a" and element.get("href"):
-            match = CODICE_RE.search(element["href"])
+        if element.name != "a" or not element.get("href"):
+            continue
 
-            if not match:
-                continue
+        match = CODICE_RE.search(element["href"])
+        if not match:
+            continue
 
-            code = match.group(1)
-            title = " ".join(
-                element.get_text(" ", strip=True).split()
+        code = match.group(1)
+        if code in items:
+            continue
+
+        title = " ".join(element.get_text(" ", strip=True).split())
+
+        if not title:
+            continue
+
+        # Recupera il testo del contenitore dell'atto nella pagina
+        # della Gazzetta, senza visitare il link dell'atto.
+        container = element.parent
+        page_text = ""
+
+        for _ in range(6):
+            if container is None:
+                break
+
+            candidate = " ".join(
+                container.get_text(" ", strip=True).split()
             )
 
-            if not title or code in items:
-                continue
+            if 80 <= len(candidate) <= 2500:
+                page_text = candidate
+                break
 
-            items[code] = {
-                "code": code,
-                "title": title,
-                "ente": ente,
-                "url": urljoin(BASE, element["href"]),
-                "issue": label,
-            }
+            container = container.parent
+
+        if not page_text:
+            page_text = title
+
+        items[code] = {
+            "code": code,
+            "title": title,
+            "ente": ente,
+            "url": urljoin(BASE, element["href"]),
+            "issue": label,
+            "page_text": page_text,
+        }
 
     return list(items.values())
+
+
+def matches(item: dict, cfg: dict) -> list[str]:
+    """
+    Cerca le parole chiave nel testo già presente
+    nella pagina della Gazzetta.
+    Non apre i singoli atti.
+    """
+
+    title = str(item.get("title", ""))
+    entity = str(item.get("ente", ""))
+    page_text = str(item.get("page_text", ""))
+
+    full_text = f"{title} {entity} {page_text}"
+    normalized_text = normalize(full_text)
+
+    # Esclude nomine e procedure amministrative successive.
+    if re.search(
+        r"\b(nomina|integrazione della commissione|"
+        r"graduatoria|diario|convocazione|revoca|annullamento)\b",
+        normalize(title),
+    ):
+        return []
+
+    # Deve esserci un riferimento territoriale al Lazio.
+    if not has_lazio_reference(full_text):
+        return []
+
+    # Esclude gli incarichi di direttore di struttura complessa.
+    if re.search(
+        r"\b(direttore di struttura complessa|"
+        r"direzione di struttura complessa|"
+        r"incarico quinquennale di direzione)\b",
+        normalized_text,
+    ):
+        return []
+
+    # Ricerca positiva: Chirurgia Generale.
+    if SURGERY_GENERAL_RE.search(full_text):
+        return ["CHIRURGIA GENERALE"]
+
+    # Altre specialità esplicitamente identificate: esclusione.
+    other_specialties = re.compile(
+        r"\b(diabetologia|dermatologia|anatomia patologica|"
+        r"neuropsichiatria infantile|cardiologia|neurologia|"
+        r"pediatria|radiologia|oncologia|ortopedia|"
+        r"ginecologia|ostetricia|urologia|anestesia|"
+        r"rianimazione|psichiatria|nefrologia|pneumologia|"
+        r"gastroenterologia|endocrinologia|ematologia|"
+        r"medicina interna|medicina del lavoro|"
+        r"malattie infettive|medicina nucleare|"
+        r"medicina d emergenza urgenza|"
+        r"medicina fisica e riabilitazione|"
+        r"angiologia|geriatria|otorinolaringoiatria|"
+        r"fisiatria|psicologia|psicoterapia)\b"
+    )
+
+    if other_specialties.search(normalized_text):
+        return []
+
+    # Profilo medico senza disciplina esplicitata:
+    # conservato per controllo manuale.
+    if MEDICAL_PROFILE_RE.search(full_text):
+        return ["DA VERIFICARE - PROFILO MEDICO NON SPECIFICATO"]
+
+    return []
 
 
 # ---------------------------------------------------------------------------
