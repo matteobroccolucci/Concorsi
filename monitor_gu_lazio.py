@@ -386,97 +386,78 @@ CLEAR_NON_MEDICAL_RE = re.compile(
 
 
 def matches(item: dict, cfg: dict) -> list[str]:
-    """
-    Valuta il bando in base alla sede effettiva e al profilo professionale.
-    Legge esclusivamente il testo HTML della Gazzetta.
-    """
-
     title = str(item.get("title", ""))
     entity = str(item.get("ente", ""))
-    normalized_title = normalize(title)
 
-    if FOLLOW_UP_ONLY.search(normalized_title):
+    if FOLLOW_UP_ONLY.search(normalize(title)):
         return []
 
-    # Legge il testo completo della pagina HTML.
     page_text = fetch_text(item["url"])
     full_text = f"{title} {entity} {page_text}"
     normalized_text = normalize(full_text)
 
-    # Esclude procedure formative, dottorati e ammissioni universitarie.
-    non_hiring = re.compile(
-        r"\b(?:ammissione ai corsi|corsi di dottorato|"
+    # Esclude dottorati e procedure formative
+    if re.search(
+        r"\b(ammissione ai corsi|corsi di dottorato|"
         r"dottorato di ricerca|ammissione al dottorato|"
-        r"iscrizione ai corsi|ammissione ai corsi di laurea)\b",
-        re.IGNORECASE,
-    )
-
-    if non_hiring.search(normalized_text):
+        r"iscrizione ai corsi)\b",
+        normalized_text,
+    ):
         return []
 
-    # Individua le sedi effettive di lavoro.
-    # Una località fuori Lazio associata a sede/servizio prevale
-    # sulla sede legale dell'ente.
-    localities_outside_lazio = [
+    # Esclude sedi di lavoro chiaramente fuori dal Lazio
+    outside_cities = (
         "benevento", "brescia", "milano", "napoli", "torino",
         "firenze", "bologna", "genova", "venezia", "padova",
-        "verona", "perugia", "ancona", "pescara", "l aquila",
-        "campobasso", "potenza", "catanzaro", "palermo",
-        "cagliari", "trento", "bolzano", "udine", "trieste",
-        "parma", "modena", "pisa", "siena", "lecce", "bari",
-        "salerno", "caserta", "avellino", "foggia", "taranto",
-    ]
-
-    outside_pattern = re.compile(
-        r"\b(?:" + "|".join(
-            re.escape(normalize(x))
-            for x in sorted(localities_outside_lazio, key=len, reverse=True)
-        ) + r")\b"
+        "verona", "perugia", "ancona", "pescara", "lecce",
+        "bari", "salerno", "catania", "palermo", "cagliari",
+        "trento", "bolzano", "udine", "trieste", "parma",
+        "modena", "pisa", "siena",
     )
-
-    workplace_words = re.compile(
-        r"\b(?:sede di lavoro|sede di servizio|luogo di lavoro|"
-        r"presso l ospedale|presso il presidio|struttura di assegnazione|"
-        r"posto di lavoro|destinazione|assegnazione)\b"
-    )
-
-    outside_workplace = False
 
     for sentence in re.split(r"[.;:!?]+|[\n\r]+", normalized_text):
-        if outside_pattern.search(sentence) and workplace_words.search(sentence):
-            outside_workplace = True
-            break
+        if (
+            any(normalize(city) in sentence for city in outside_cities)
+            and re.search(
+                r"\b(sede di lavoro|sede di servizio|luogo di lavoro|"
+                r"presso l ospedale|presso il presidio|"
+                r"struttura di assegnazione|posto di lavoro|"
+                r"per l ospedale)\b",
+                sentence,
+            )
+        ):
+            return []
 
-    if outside_workplace:
-        return []
-
-    # Deve esserci un riferimento territoriale al Lazio.
     if not has_lazio_reference(full_text):
         return []
 
-    # Chirurgia Generale esplicita.
+    # Chirurgia Generale: unica specialità da includere
     if SURGERY_GENERAL_RE.search(full_text):
+        if re.search(
+            r"\b(direttore|direzione|direttore di struttura complessa|"
+            r"struttura complessa)\b",
+            normalized_text,
+        ):
+            return []
         return ["CHIRURGIA GENERALE"]
 
-    # Profili non medici chiaramente identificati.
-    if CLEAR_NON_MEDICAL_RE.search(full_text):
-        return []
-
-    # Profilo medico, ma disciplina non specificata.
-    if MEDICAL_PROFILE_RE.search(full_text):
-        return ["DA VERIFICARE - PROFILO MEDICO NON SPECIFICATO"]
-
-    # Se il bando è una procedura di assunzione ma non chiarisce
-    # i destinatari, lo conserva per controllo manuale.
-    recruitment = re.compile(
-        r"\b(?:concorso|selezione pubblica|avviso pubblico|"
-        r"assunzione|mobilita|incarico|tempo indeterminato|"
-        r"tempo determinato|libero professionale|collaborazione|"
-        r"dirigente)\b"
+    # Altre specialità mediche: esclusione
+    other_specialties = re.compile(
+        r"\b(diabetologia|dermatologia|anatomia patologica|"
+        r"neuropsichiatria infantile|cardiologia|neurologia|"
+        r"pediatria|radiologia|oncologia|ortopedia|"
+        r"ginecologia|ostetricia|urologia|anestesia|"
+        r"rianimazione|psichiatria|nefrologia|pneumologia|"
+        r"gastroenterologia|endocrinologia|ematologia|"
+        r"medicina interna|medicina del lavoro|"
+        r"malattie infettive|medicina nucleare)\b"
     )
 
-    if recruitment.search(normalized_text):
-        return ["DA VERIFICARE - DESTINATARI NON CHIARI"]
+    if other_specialties.search(normalized_text):
+        return []
+
+    if MEDICAL_PROFILE_RE.search(full_text):
+        return ["DA VERIFICARE - PROFILO MEDICO NON SPECIFICATO"]
 
     return []
 
