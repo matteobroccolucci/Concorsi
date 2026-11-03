@@ -1,37 +1,30 @@
 name: Monitor Gazzetta Ufficiale concorsi
-
+ 
 on:
   schedule:
     - cron: "30 8 * * 2,3,5,6"
   workflow_dispatch: {}
-
+ 
 permissions:
   contents: write
-
+ 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
       - run: pip install -r requirements.txt
-
-      - name: Esegui monitor nazionale
+      - name: Esegui monitor
         env:
           CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python monitor_gu_lazio.py --dry-run
-        
-      - name: Salva stato
+        run: python monitor_gu_lazio.py
+      - name: Salva stato (seen_lazio.json)
         run: |
           git config user.name "gu-monitor"
           git config user.email "gu-monitor@users.noreply.github.com"
-          if [ -f seen_lazio.json ]; then
-            git add seen_lazio.json
-          fi
-          git diff --cached --quiet || (git commit -m "aggiorna stato Lazio" && git push)
+          git add seen_lazio.json
+          git diff --cached --quiet || (git commit -m "aggiorna stato" && git push)
+ 
