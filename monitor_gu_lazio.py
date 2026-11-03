@@ -850,6 +850,20 @@ def main() -> int:
         f"stato salvato ({len(seen | all_codes)} codici)."
     )
  
+    # Riepilogo solo su Telegram (se configurato). Un errore qui non e' grave.
+    try:
+        report = (
+            "🟢 MONITOR CONCORSI - CONTROLLO COMPLETATO\n\n"
+            f"📅 {time.strftime('%d/%m/%Y alle %H:%M')} (UTC)\n"
+            f"📰 Gazzette lette: {len(issues)}\n"
+            f"📋 Bandi analizzati: {len(all_codes)}\n"
+            f"🔎 Bandi segnalati: {len(found)}\n\n"
+            "🇮🇹 Lazio - Chirurgia Generale"
+        )
+        send_telegram(report)
+    except Exception as error:
+        print(f"Riepilogo Telegram non inviato: {error}")
+ 
     return 0
  
  
