@@ -384,44 +384,102 @@ CLEAR_NON_MEDICAL_RE = re.compile(
 )
 
 
+
 def matches(item: dict, cfg: dict) -> list[str]:
-    """Legge sempre la pagina HTML completa e classifica gli atti riferiti al Lazio."""
+    """
+    Valuta il bando in base alla sede effettiva e al profilo professionale.
+    Legge esclusivamente il testo HTML della Gazzetta.
+    """
+
     title = str(item.get("title", ""))
     entity = str(item.get("ente", ""))
-
-    # Le comunicazioni meramente procedurali non sono nuove opportunità.
-    # Le rettifiche restano invece valutabili e possono essere segnalate.
     normalized_title = normalize(title)
+
     if FOLLOW_UP_ONLY.search(normalized_title):
         return []
 
-    # Legge il contenuto della pagina di dettaglio della Gazzetta.
-    # Non scarica PDF o allegati: usa esclusivamente il testo HTML.
+    # Legge il testo completo della pagina HTML.
     page_text = fetch_text(item["url"])
     full_text = f"{title} {entity} {page_text}"
+    normalized_text = normalize(full_text)
 
+    # Esclude procedure formative, dottorati e ammissioni universitarie.
+    non_hiring = re.compile(
+        r"\b(?:ammissione ai corsi|corsi di dottorato|"
+        r"dottorato di ricerca|ammissione al dottorato|"
+        r"iscrizione ai corsi|ammissione ai corsi di laurea)\b",
+        re.IGNORECASE,
+    )
+
+    if non_hiring.search(normalized_text):
+        return []
+
+    # Individua le sedi effettive di lavoro.
+    # Una località fuori Lazio associata a sede/servizio prevale
+    # sulla sede legale dell'ente.
+    localities_outside_lazio = [
+        "benevento", "brescia", "milano", "napoli", "torino",
+        "firenze", "bologna", "genova", "venezia", "padova",
+        "verona", "perugia", "ancona", "pescara", "l aquila",
+        "campobasso", "potenza", "catanzaro", "palermo",
+        "cagliari", "trento", "bolzano", "udine", "trieste",
+        "parma", "modena", "pisa", "siena", "lecce", "bari",
+        "salerno", "caserta", "avellino", "foggia", "taranto",
+    ]
+
+    outside_pattern = re.compile(
+        r"\b(?:" + "|".join(
+            re.escape(normalize(x))
+            for x in sorted(localities_outside_lazio, key=len, reverse=True)
+        ) + r")\b"
+    )
+
+    workplace_words = re.compile(
+        r"\b(?:sede di lavoro|sede di servizio|luogo di lavoro|"
+        r"presso l ospedale|presso il presidio|struttura di assegnazione|"
+        r"posto di lavoro|destinazione|assegnazione)\b"
+    )
+
+    outside_workplace = False
+
+    for sentence in re.split(r"[.;:!?]+|[\n\r]+", normalized_text):
+        if outside_pattern.search(sentence) and workplace_words.search(sentence):
+            outside_workplace = True
+            break
+
+    if outside_workplace:
+        return []
+
+    # Deve esserci un riferimento territoriale al Lazio.
     if not has_lazio_reference(full_text):
         return []
 
-    # Prima scelta: riferimento esplicito alla Chirurgia Generale.
+    # Chirurgia Generale esplicita.
     if SURGERY_GENERAL_RE.search(full_text):
-        result = ["CHIRURGIA GENERALE"]
-        if normalized_title.startswith("rettifica"):
-            result.append("AGGIORNAMENTO/RETTIFICA")
-        return result
+        return ["CHIRURGIA GENERALE"]
 
-    # Se la pagina identifica chiaramente un profilo non medico, non è
-    # un'opportunità di Chirurgia Generale.
-    if CLEAR_NON_MEDICAL_RE.search(full_text) and not MEDICAL_PROFILE_RE.search(full_text):
+    # Profili non medici chiaramente identificati.
+    if CLEAR_NON_MEDICAL_RE.search(full_text):
         return []
 
-    # Se il profilo è medico ma la disciplina non è esplicitata, oppure
-    # il testo non consente di capire con certezza a chi sia rivolto,
-    # non scartiamo l'atto: lo segnaliamo separatamente per verifica manuale.
+    # Profilo medico, ma disciplina non specificata.
     if MEDICAL_PROFILE_RE.search(full_text):
         return ["DA VERIFICARE - PROFILO MEDICO NON SPECIFICATO"]
 
-    return ["DA VERIFICARE - DESTINATARI NON CHIARI"]
+    # Se il bando è una procedura di assunzione ma non chiarisce
+    # i destinatari, lo conserva per controllo manuale.
+    recruitment = re.compile(
+        r"\b(?:concorso|selezione pubblica|avviso pubblico|"
+        r"assunzione|mobilita|incarico|tempo indeterminato|"
+        r"tempo determinato|libero professionale|collaborazione|"
+        r"dirigente)\b"
+    )
+
+    if recruitment.search(normalized_text):
+        return ["DA VERIFICARE - DESTINATARI NON CHIARI"]
+
+    return []
+
 
 
 # ---------------------------------------------------------------------------
