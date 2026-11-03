@@ -20,6 +20,8 @@ jobs:
       - name: Esegui monitor
         env:
           CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python monitor_gu_lazio.py
       - name: Salva stato (seen_lazio.json)
         run: |
