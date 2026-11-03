@@ -25,8 +25,8 @@ jobs:
           CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python monitor_gu.py --dry-run
-
+        run: python monitor_gu_lazio.py --dry-run
+        
       - name: Salva stato
         run: |
           git config user.name "gu-monitor"
